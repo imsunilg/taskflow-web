@@ -65,6 +65,7 @@ import { IconComponent } from '../../shared/components/icon/icon.component';
         </div>
 
         <div class="topbar-right">
+          <a class="btn btn-outline btn-sm" routerLink="/ai-assistant"><tf-icon name="sparkle" [size]="15" /> AI</a>
           <button class="btn btn-accent btn-sm" type="button" (click)="ui.openQuickAdd()">
             <tf-icon name="plus" [size]="16" /> Quick add
           </button>
@@ -159,6 +160,12 @@ import { IconComponent } from '../../shared/components/icon/icon.component';
       <!-- sidebar -->
       <nav class="app-sidebar" [class.is-open]="ui.sidebarDrawerOpen()" aria-label="Primary">
         <div class="sidebar-scroll">
+          <div class="nav-group">
+            <a routerLink="/ai-assistant" routerLinkActive="is-active" class="nav-item ai-nav-item" (click)="closeDrawer()">
+              <tf-icon name="sparkle" class="nav-icon" /> <span class="nav-label">AI Assistant</span>
+            </a>
+          </div>
+          <div class="nav-divider"></div>
           <div class="nav-group">
             <a routerLink="/tasks/inbox" routerLinkActive="is-active" class="nav-item" (click)="closeDrawer()">
               <tf-icon name="inbox" class="nav-icon" /> <span class="nav-label">Inbox</span>

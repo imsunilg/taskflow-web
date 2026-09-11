@@ -59,6 +59,10 @@ export const routes: Routes = [
         loadChildren: () => import('./features/voice/voice.routes').then((m) => m.VOICE_ROUTES),
       },
       {
+        path: 'ai-assistant',
+        loadChildren: () => import('./features/ai/ai.routes').then((m) => m.AI_ROUTES),
+      },
+      {
         path: 'settings',
         loadChildren: () => import('./features/settings/settings.routes').then((m) => m.SETTINGS_ROUTES),
       },

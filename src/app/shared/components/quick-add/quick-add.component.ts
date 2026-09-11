@@ -12,6 +12,7 @@ import { AbstractControl, FormBuilder, ReactiveFormsModule, Validators } from '@
 import { TaskStore } from '../../../core/services/task.store';
 import { UiStateService } from '../../../core/services/ui-state.service';
 import { CategoryApiService } from '../../../features/categories/category-api.service';
+import { AiApiService } from '../../../features/ai/ai-api.service';
 import { NormalizedApiError } from '../../../core/interceptors/error.interceptor';
 import { Category } from '../../../core/models/category.model';
 import { Priority } from '../../../core/models/task.model';
@@ -38,6 +39,22 @@ import { IconComponent } from '../icon/icon.component';
           @if (serverError()) {
             <div class="form-server-error" role="alert">{{ serverError() }}</div>
           }
+
+          <div class="ai-ask-card" style="margin-bottom:18px">
+            <h3><tf-icon name="sparkle" [size]="14" /> Quick add with AI</h3>
+            <div class="ai-ask-sub">Describe the task in a sentence — AI fills the fields below for you to review.</div>
+            <div class="ai-ask-row">
+              <input
+                #aiText
+                type="text"
+                placeholder="e.g. Prepare monthly report tomorrow at 4 PM, high priority"
+                autocomplete="off"
+              />
+              <button type="button" class="btn btn-accent btn-sm" (click)="analyzeWithAi(aiText.value)" [disabled]="aiAnalyzing()">
+                <tf-icon name="sparkle" [size]="13" /> {{ aiAnalyzing() ? 'Analyzing…' : 'Analyze' }}
+              </button>
+            </div>
+          </div>
 
           <div class="field">
             <label for="qa-title">Title <span class="req" aria-hidden="true">*</span></label>
@@ -172,6 +189,8 @@ export class QuickAddComponent implements OnInit {
   readonly store = inject(TaskStore);
   readonly ui = inject(UiStateService);
   private readonly categoryApi = inject(CategoryApiService);
+  private readonly aiApi = inject(AiApiService);
+  readonly aiAnalyzing = signal(false);
 
   private readonly titleInput = viewChild<ElementRef<HTMLInputElement>>('titleInput');
 
@@ -223,6 +242,34 @@ export class QuickAddComponent implements OnInit {
   }
   removeRow(id: number): void {
     this.subtaskRows.update((r) => r.filter((x) => x.id !== id));
+  }
+
+  analyzeWithAi(text: string): void {
+    const v = text.trim();
+    if (!v || this.aiAnalyzing()) return;
+    this.aiAnalyzing.set(true);
+    this.aiApi.analyzeText(v).subscribe({
+      next: (res) => {
+        this.aiAnalyzing.set(false);
+        if (!res.success || !res.data) return;
+        const draft = res.data;
+        this.form.patchValue({
+          title: draft.title,
+          description: draft.description ?? '',
+          dueDate: draft.dueDate ?? '',
+          dueTime: draft.dueTime ? draft.dueTime.slice(0, 5) : '',
+          priority: (draft.priority ?? 'Medium') as Priority,
+        });
+        if (draft.category) {
+          const match = this.categories().find((c) => c.name.toLowerCase() === draft.category!.toLowerCase());
+          if (match) this.form.controls.categoryId.setValue(match.id);
+        }
+        if (draft.tags.length) {
+          this.form.controls.tags.setValue(draft.tags.map((t) => `#${t}`).join(' '));
+        }
+      },
+      error: () => this.aiAnalyzing.set(false),
+    });
   }
 
   onCtrlEnter(e: Event): void {

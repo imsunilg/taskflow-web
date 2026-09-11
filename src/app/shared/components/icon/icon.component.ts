@@ -37,7 +37,9 @@ type IconName =
   | 'flag'
   | 'eye'
   | 'eye-off'
-  | 'sliders';
+  | 'sliders'
+  | 'sparkle'
+  | 'send';
 
 const PATHS: Record<IconName, string> = {
   menu: '<path d="M3 6h18M3 12h18M3 18h18"/>',
@@ -75,6 +77,8 @@ const PATHS: Record<IconName, string> = {
   'eye-off':
     '<path d="M1 1l22 22"/><path d="M10.6 5.1A11 11 0 0 1 12 5c7 0 11 7 11 7a13 13 0 0 1-3 3.5M6.6 6.6A13 13 0 0 0 1 12s4 7 11 7a11 11 0 0 0 4.5-.9"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/>',
   sliders: '<path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="7" cy="18" r="2"/>',
+  sparkle: '<path d="M12 3l1.6 4.9L18.5 9.5l-4.9 1.6L12 16l-1.6-4.9L5.5 9.5l4.9-1.6L12 3Z"/><path d="M19 15.5l.8 2.3 2.3.8-2.3.8-.8 2.3-.8-2.3-2.3-.8 2.3-.8.8-2.3Z"/>',
+  send: '<path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7Z"/>',
 };
 
 @Component({

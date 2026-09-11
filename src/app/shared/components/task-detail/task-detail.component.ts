@@ -6,7 +6,9 @@ import { TaskApiService } from '../../../features/tasks/task-api.service';
 import { TaskStore } from '../../../core/services/task.store';
 import { UiStateService } from '../../../core/services/ui-state.service';
 import { ToastService } from '../../../core/services/toast.service';
+import { AiApiService } from '../../../features/ai/ai-api.service';
 import { Task, UpdateTaskRequest } from '../../../core/models/task.model';
+import { TaskAnalysis, SubtaskNode } from '../../../core/models/ai.model';
 import { SubtaskRowComponent } from '../subtask-row/subtask-row.component';
 import { IconComponent } from '../icon/icon.component';
 import { RelativeDatePipe } from '../../pipes/relative-date.pipe';
@@ -109,6 +111,44 @@ import { ReminderLabelPipe } from '../../pipes/reminder-label.pipe';
           </div>
 
           <div class="detail-section">
+            <div class="detail-section-title"><tf-icon name="sparkle" [size]="12" /> AI Actions</div>
+            <div class="ai-card-btns">
+              <button type="button" class="btn btn-outline btn-sm" (click)="analyzeWithAi(t.id)" [disabled]="aiAnalyzing()">
+                <tf-icon name="sparkle" [size]="13" /> {{ aiAnalyzing() ? 'Analyzing…' : 'Analyze with AI' }}
+              </button>
+              <button type="button" class="btn btn-outline btn-sm" (click)="breakDownWithAi(t.id, t.title, t.description)" [disabled]="aiBreakingDown()">
+                <tf-icon name="layers" [size]="13" /> {{ aiBreakingDown() ? 'Thinking…' : 'Break down with AI' }}
+              </button>
+            </div>
+
+            @if (aiAnalysis(); as a) {
+              <div class="ai-analysis-grid">
+                <div class="ai-analysis-field"><div class="k">Priority</div><div class="v">{{ a.priority }}</div></div>
+                <div class="ai-analysis-field"><div class="k">Estimated effort</div><div class="v">{{ a.estimatedEffort }}</div></div>
+                <div class="ai-analysis-field"><div class="k">Complexity</div><div class="v">{{ a.complexity }}</div></div>
+                <div class="ai-analysis-field"><div class="k">Suggested deadline</div><div class="v">{{ a.suggestedDeadline }}</div></div>
+              </div>
+              <div class="ai-analysis-note"><b>Potential blocker</b><br />{{ a.potentialBlocker }}</div>
+              <div class="ai-analysis-note" style="margin-top:8px"><b>Recommended next action</b><br />{{ a.recommendedNextAction }}</div>
+            }
+
+            @if (aiBreakdownRows(); as rows) {
+              <div style="margin-top:12px">
+                @for (row of rows; track row.i) {
+                  <div class="ai-subtask-preview-row">
+                    <input type="checkbox" [checked]="row.include" (change)="toggleBreakdownRow(row.i)" />
+                    <input type="text" [value]="row.title" (change)="editBreakdownRow(row.i, $event)" />
+                  </div>
+                }
+                <div class="ai-card-btns" style="margin-top:8px">
+                  <button type="button" class="btn btn-accent btn-sm" (click)="confirmAiBreakdown(t.id)">Add Selected Subtasks</button>
+                  <button type="button" class="btn btn-ghost btn-sm" (click)="aiBreakdownRows.set(null)">Cancel</button>
+                </div>
+              </div>
+            }
+          </div>
+
+          <div class="detail-section">
             <div class="subtask-progress-header">
               <span>Subtasks</span>
               <span>{{ doneCount() }} / {{ t.subtasks.length }} completed</span>
@@ -178,10 +218,16 @@ export class TaskDetailComponent {
   readonly store = inject(TaskStore);
   readonly ui = inject(UiStateService);
   private readonly toast = inject(ToastService);
+  private readonly aiApi = inject(AiApiService);
 
   readonly task = signal<Task | null>(null);
   newSub = '';
   private readonly save$ = new Subject<UpdateTaskRequest>();
+
+  readonly aiAnalyzing = signal(false);
+  readonly aiAnalysis = signal<TaskAnalysis | null>(null);
+  readonly aiBreakingDown = signal(false);
+  readonly aiBreakdownRows = signal<{ i: number; title: string; include: boolean }[] | null>(null);
 
   readonly doneCount = computed(() => this.task()?.subtasks.filter((s) => s.isDone).length ?? 0);
   readonly progressPct = computed(() => {
@@ -193,6 +239,8 @@ export class TaskDetailComponent {
     effect(() => {
       const id = this.ui.detailTaskId();
       this.task.set(null);
+      this.aiAnalysis.set(null);
+      this.aiBreakdownRows.set(null);
       if (id && !id.startsWith('temp-')) {
         this.taskApi.getTask(id).subscribe({ next: (r) => r.data && this.task.set(r.data) });
       } else if (id) {
@@ -242,6 +290,68 @@ export class TaskDetailComponent {
   removeSub(taskId: string, subtaskId: string): void {
     this.taskApi.deleteSubtask(taskId, subtaskId).subscribe({
       next: () => this.task.update((t) => (t ? { ...t, subtasks: t.subtasks.filter((s) => s.id !== subtaskId) } : t)),
+    });
+  }
+
+  analyzeWithAi(taskId: string): void {
+    if (this.aiAnalyzing()) return;
+    this.aiAnalyzing.set(true);
+    this.aiApi.getTaskAnalysis(taskId).subscribe({
+      next: (res) => {
+        this.aiAnalyzing.set(false);
+        if (res.success && res.data) this.aiAnalysis.set(res.data);
+        else this.toast.show('error', res.message || 'Could not analyze this task.');
+      },
+      error: () => this.aiAnalyzing.set(false),
+    });
+  }
+
+  breakDownWithAi(taskId: string, title: string, description: string | null): void {
+    if (this.aiBreakingDown()) return;
+    this.aiBreakingDown.set(true);
+    this.aiApi.previewBreakdown(taskId).subscribe({
+      next: (res) => {
+        this.aiBreakingDown.set(false);
+        if (res.success && res.data) {
+          this.aiBreakdownRows.set(res.data.subtasks.map((s, i) => ({ i, title: s.title, include: true })));
+        } else {
+          this.toast.show('error', res.message || 'Could not break this task down.');
+        }
+      },
+      error: () => this.aiBreakingDown.set(false),
+    });
+  }
+
+  toggleBreakdownRow(i: number): void {
+    this.aiBreakdownRows.update((rows) => rows?.map((r) => (r.i === i ? { ...r, include: !r.include } : r)) ?? null);
+  }
+
+  editBreakdownRow(i: number, e: Event): void {
+    const value = (e.target as HTMLInputElement).value;
+    this.aiBreakdownRows.update((rows) => rows?.map((r) => (r.i === i ? { ...r, title: value } : r)) ?? null);
+  }
+
+  confirmAiBreakdown(taskId: string): void {
+    const rows = this.aiBreakdownRows();
+    const titles = (rows ?? []).filter((r) => r.include && r.title.trim()).map((r) => r.title.trim());
+    if (titles.length === 0) {
+      this.aiBreakdownRows.set(null);
+      return;
+    }
+    this.aiApi.confirmBreakdown(taskId, titles).subscribe({
+      next: (res) => {
+        this.aiBreakdownRows.set(null);
+        if (res.success) {
+          this.toast.show('success', res.message || `${titles.length} subtask(s) added.`);
+          this.taskApi.getTask(taskId).subscribe({ next: (r) => r.data && this.task.set(r.data) });
+        } else {
+          this.toast.show('error', res.message || 'Could not add those subtasks.');
+        }
+      },
+      error: (err: { message?: string }) => {
+        this.aiBreakdownRows.set(null);
+        this.toast.show('error', err?.message || 'Could not add those subtasks.');
+      },
     });
   }
 
